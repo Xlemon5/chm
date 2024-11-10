@@ -1,0 +1,99 @@
+import numpy as np
+import pandas as pd
+
+def solve_system(lower_diag, main_diag, upper_diag, vec, n):
+    # Метод прогонки для решения трехдиагональной системы уравнений
+    res = np.zeros(n)
+    mu = np.zeros(n)
+    nu = np.zeros(n)
+
+    # Прямой ход прогонки
+    mu[0] = vec[0] / main_diag[0]
+    nu[0] = -upper_diag[0] / main_diag[0]
+
+    for i in range(1, n - 1):
+        denominator = main_diag[i] + lower_diag[i - 1] * nu[i - 1]
+        mu[i] = (vec[i] - lower_diag[i - 1] * mu[i - 1]) / denominator
+        nu[i] = -upper_diag[i] / denominator
+
+    mu[n - 1] = (vec[n - 1] - lower_diag[n - 2] * mu[n - 2]) / (main_diag[n - 1] + lower_diag[n - 2] * nu[n - 2])
+
+    # Обратный ход прогонки
+    res[n - 1] = mu[n - 1]
+    for i in range(n - 2, -1, -1):
+        res[i] = mu[i] + nu[i] * res[i + 1]
+
+    return res
+
+def cubic_spline(x, y, a, b):
+    n = len(x)
+    h = np.diff(x)
+
+    if n < 2:
+        return None, None, None, None, 1
+    if not np.all(np.diff(x) > 0):
+        return None, None, None, None, 2
+
+    lower_diag = np.zeros(n - 1)
+    main_diag = np.zeros(n)
+    upper_diag = np.zeros(n - 1)
+    F = np.zeros(n)
+
+    # Заполнение граничных условий
+    main_diag[0] = 1
+    F[0] = a
+
+    # Заполнение диагоналей и вектора F
+    for i in range(1, n - 1):
+        lower_diag[i - 1] = h[i - 1]
+        main_diag[i] = 2 * (h[i - 1] + h[i])
+        upper_diag[i] = h[i]
+
+    main_diag[n - 1] = 1
+    lower_diag[n - 2] = 1 / 2
+    F[n - 1] = (3 / h[n - 2]) * (b - (y[n - 1] - y[n - 2]) / h[n - 2])
+
+    for i in range(1, n - 1):
+        F[i] = 6 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
+
+    return lower_diag, main_diag, upper_diag, F, 0
+
+def read_input(filename):
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+    
+    x = np.array([float(val) for val in lines[0].split()])
+    y = np.array([float(val) for val in lines[1].split()])
+    a = float(lines[2].strip())
+    b = float(lines[3].strip())
+    
+    return x, y, a, b
+
+def write_output(filename, x, y, second_derivatives):
+    df = pd.DataFrame({
+        'x': x,
+        'f(x)': y,
+        "f''(x)": second_derivatives,
+    })
+    df.to_csv(filename, index=False)
+
+def main(input_file, output_file):
+    x, y, a, b = read_input(input_file)
+    lower_diag, main_diag, upper_diag, F, IER = cubic_spline(x, y, a, b)
+
+    if IER == 0:
+        second_derivatives = solve_system(lower_diag, main_diag, upper_diag, F, len(x))
+        write_output(output_file, x, y, second_derivatives)
+        print(f"Результаты записаны в файл: {output_file}")
+    else:
+        if IER == 1:
+            print("Ошибка: недостаточно точек для построения сплайна.")
+        elif IER == 2:
+            print("Ошибка: значения x должны быть строго возрастающими.")
+        else:
+            print(f"Ошибка при построении сплайна. Код ошибки: {IER}")
+
+# Запуск программы с файлами
+input_file = 'test1.txt'
+output_file = 'output.csv'
+main(input_file, output_file)
